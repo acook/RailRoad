@@ -15,27 +15,19 @@ end
   
 namespace :diagram do
  
-  @MODELS_ALL_SVG = full_path('models_complete.svg').freeze
-  @MODELS_BRIEF_SVG = full_path('models_brief.svg').freeze
   @CONTROLLERS_ALL_SVG = full_path('controllers_complete.svg').freeze
   @CONTROLLERS_BRIEF_SVG = full_path('controllers_brief.svg').freeze
- 
-  namespace :models do
- 
-    desc 'Generates an SVG class diagram for all models.'
-    task :complete do
-      f = @MODELS_ALL_SVG
-      puts "Generating #{f}"
-      sh "railroady -ilamM | dot -Tsvg > #{f}"
+
+  desc 'Generates an SVG class diagram for all models. Pass in OPTIONS to customize.'
+  task :models do
+    path = if ENV["FILENAME"] && ENV["FILENAME"].include?("/")
+      ENV["FILENAME"]
+           else
+       require 'fileutils'
+       FileUtils.mkdir_p("#{Rails.root}/doc/diagrams/models")
+       "doc/diagrams/models/#{ENV["FILENAME"] || filename}"
     end
- 
-    desc 'Generates an abbreviated SVG class diagram for all models.'
-    task :brief do
-      f = @MODELS_BRIEF_SVG
-      puts "Generating #{f}"
-      sh "railroady -bilamM | dot -Tsvg > #{f}"
-    end
-    
+    sh %{railroady -iamM #{ENV["OPTIONS"]} | dot -Tsvg > #{path}}
   end
   
   namespace :controllers do

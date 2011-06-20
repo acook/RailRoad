@@ -33,7 +33,8 @@ class AppDiagram
   def initialize(options = OptionsStruct.new)
     @options = options
     @graph = DiagramGraph.new
-    @graph.show_label = @options.label
+    @graph.show_label = !@options.hide_label
+    @graph.label = @options.label
   end
   
 

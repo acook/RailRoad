@@ -16,6 +16,7 @@ class OptionsStruct < OpenStruct
                      :brief => false,
                      :specify => [],
                      :exclude => [],
+                     :filter => [],
                      :inheritance => false,
                      :join => false,
                      :label => false,
@@ -25,9 +26,11 @@ class OptionsStruct < OpenStruct
                      :hide_public => false,
                      :hide_protected => false,
                      :hide_private => false,
+                     :hide_label => false,
+                     :only_content_columns => false,
                      :plugins_models => false,
                      :root => '',
-                     :show_belongs_to => false,
+                     :hide_belongs_to => false,
                      :transitive => false,
                      :verbose => false,
                      :xmi => false,
@@ -51,10 +54,13 @@ class OptionsStruct < OpenStruct
       opts.on("-e", "--exclude file1[,fileN]", Array, "Exclude given files") do |list|
         self.exclude = list
       end
+      opts.on("-f", "--filter term1[,termN]", Array, "Filter classes and/or associations") do |list|
+        self.filter = list.map { |i| i.strip }
+      end
       opts.on("-i", "--inheritance", "Include inheritance relations") do |i|
         self.inheritance = i
       end
-      opts.on("-l", "--label", "Add a label with diagram information", 
+      opts.on("-l", "--label line1[,lineN]", Array, "Add a label with diagram information",
               "  (type, date, migration, version)") do |l|
         self.label = l
       end
@@ -78,14 +84,20 @@ class OptionsStruct < OpenStruct
               "  (not only ActiveRecord::Base derived)") do |a|
         self.all = a
       end
-      opts.on("--show-belongs_to", "Show belongs_to associations") do |s|
-        self.show_belongs_to = s
+      opts.on("--hide-label", "Hide the label") do |s|
+        self.hide_label = s
+      end
+      opts.on("--hide-belongs_to", "Hide belongs_to associations") do |s|
+        self.hide_belongs_to = s
       end
       opts.on("--hide-magic", "Hide magic field names") do |h|
         self.hide_magic = h
       end
       opts.on("--hide-types", "Hide attributes type") do |h|
         self.hide_types = h
+      end
+      opts.on("--only-content-columns", "Display only content columns") do |h|
+        self.only_content_columns = h
       end
       opts.on("-j", "--join", "Concentrate edges") do |j|
         self.join = j
