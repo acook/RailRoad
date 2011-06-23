@@ -26,6 +26,7 @@ class DiagramGraph
     @edges << edge
   end
 
+  # Refactoring: should probably use Sets instead of hashes.
   def add_cluster(superclass_name, node)
     # Remove node to be generated
     @nodes.delete_at(@nodes.index(node))
@@ -117,7 +118,7 @@ class DiagramGraph
   def dot_label
     return if !@show_label || label.empty?
 #    "\t_diagram_info [shape=\"plaintext\", label=\"#{label.map {|x| "#{x}\\l" }.join}\", fontsize=13]\n"
-    "\t labelloc=\"t\";\n \tlabel=\"#{label.map {|x| "#{x}\\l" }.join}\"\n"
+    "\tlabelloc=\"t\";\n \tlabel=\"#{label.map {|x| "#{x}\\l" }.join}\"\n"
   end
 
   # Build a DOT graph node
@@ -158,11 +159,11 @@ class DiagramGraph
     options =  name != '' ? "label=\"#{name}\", " : ''
     case type
       when 'one-one'
-           options += 'arrowtail=odot, arrowhead=odot, dir=both, concentrate=true'
+           options += 'arrowtail=tee, arrowhead=odot, dir=both, concentrate=true'
       when 'one-many'
-           options += 'arrowtail=odot, arrowhead=normal, dir=both, concentrate=true'
+           options += 'arrowtail=odot, arrowhead=crow, dir=both, concentrate=true'
       when 'many-many'
-           options += 'arrowtail=normal, arrowhead=normal, dir=both, concentrate=true'
+           options += 'arrowtail=crow, arrowhead=crow, dir=both, concentrate=true'
       when 'is-a'
            options += 'label="", dir="none"'
       when 'is-a-child'

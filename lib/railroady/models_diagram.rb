@@ -101,9 +101,8 @@ class ModelsDiagram < AppDiagram
       ['module', current_class.name]
     end
 
-    # Only consider meaningful inheritance relations for generated classes
+    # Only consider meaningful inheritance relations for generated classes and group them into subgraphs/clusters
     if @options.inheritance && ![ActiveRecord::Base, Object].include?(current_class.superclass)
-#      @graph.add_edge ['is-a', current_class.superclass.name, current_class.name]
       @graph.add_cluster(current_class.superclass.name, node)
     end
   end
@@ -130,6 +129,15 @@ class ModelsDiagram < AppDiagram
     #    association_class_name = class_name.split("::")[0..-2].push(association_class_name).join("::")
     #  end
     association_class_name.gsub!(%r{^::}, '')
+
+    # Ignoring belongs_to macro since has_many and has_one edges' arrowtails/arrowheads will succinctly indicate
+    # the relationship between the models, there is no need to duplicate the edges to indicated the relationship in reverse.
+    # Doesn't conflict with polymorphic belongs_to relationships.
+    if reflection.macro.to_s == 'belongs_to' && association_class_name.constantize.reflect_on_all_associations(:has_many).any? do
+        |r| r.name == class_name.underscore.pluralize.to_sym
+      end
+      return
+    end
 
     assoc_type = if ['has_one', 'belongs_to'].include? reflection.macro.to_s
       'one-one'
