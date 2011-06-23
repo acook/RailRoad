@@ -57,6 +57,9 @@ class OptionsStruct < OpenStruct
       opts.on("-f", "--filter term1[,termN]", Array, "Filter classes and/or associations") do |list|
         self.filter = list.map { |i| i.strip }
       end
+      opts.on("-g", "--github REPO_URL", "Include github links ie. 'https://github.com/Mixbook/mixbook_com/'") do |g|
+        self.github = g[-1] == "/" ? g : g + "/"
+      end
       opts.on("-i", "--inheritance", "Include inheritance relations") do |i|
         self.inheritance = i
       end

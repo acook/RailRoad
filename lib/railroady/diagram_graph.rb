@@ -9,6 +9,8 @@
 class DiagramGraph
 
   attr_writer :label
+  attr_accessor :github
+  @@APP_MODEL_PATH = "blob/master/app/models/"
 
   def initialize
     @diagram_type = ''
@@ -70,7 +72,7 @@ class DiagramGraph
   # Generate DOT graph
   def to_dot
     return dot_header +
-           @nodes.map{ |n| dot_node(n[0], n[1], n[2]) }.join +
+           @nodes.map{ |n| dot_node(n[0], n[1], n[2], n[1]) }.join +
            @clusters.map{ |k, h| dot_cluster(k, h[:nodes]) }.join +
            @edges.map{ |e| dot_edge(e[0], e[1], e[2], e[3]) }.join +
            dot_footer
@@ -86,7 +88,7 @@ class DiagramGraph
 
   def dot_cluster(name, nodes)
     block = dot_cluster_header(name)
-    block += "\t" + nodes.map{|n| dot_node(n[0], n[1], n[2])}.join("\t")
+    block += "\t" + nodes.map{ |n| dot_node(n[0], n[1], n[2], name) }.join("\t")
     block += "\t" + dot_cluster_edges(name, nodes)
     "#{block} \t#{dot_footer}"
   end
@@ -122,12 +124,13 @@ class DiagramGraph
   end
 
   # Build a DOT graph node
-  def dot_node(type, name, attributes=nil)
+  def dot_node(type, name, attributes=nil, filename=nil)
     case type
       when 'model'
            options = 'shape=Mrecord, label="{' + name + '|'
            options += attributes.join('\l')
            options += '\l}"'
+           options += ', URL="' + @github + @@APP_MODEL_PATH + filename.underscore  + '.rb"' if  !filename.nil? and !@github.nil?
       when 'model-brief'
            options = ''
       when 'class'
@@ -156,7 +159,7 @@ class DiagramGraph
   # Build a DOT graph edge
   # http://www.graphviz.org/doc/info/attrs.html
   def dot_edge(type, from, to, name = '')
-    options =  name != '' ? "label=\"#{name}\", " : ''
+    options =  name != '' ? "label=\"#{name}\", tooltip=\"#{name}\", " : ''
     case type
       when 'one-one'
            options += 'arrowtail=tee, arrowhead=odot, dir=both, concentrate=true'
