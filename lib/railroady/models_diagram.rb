@@ -54,10 +54,9 @@ class ModelsDiagram < AppDiagram
   # Process a model class
   def process_class(current_class)
     say_if_verbose("Processing #{current_class}", :tab => 1)
-    generated = false
 
     # Is current_clas derived from ActiveRecord::Base?
-    if defined?(ActiveRecord::Base) && current_class < ActiveRecord::Base
+    node = if defined?(ActiveRecord::Base) && current_class < ActiveRecord::Base
       node_attribs = []
       node_type = if @options.brief || current_class.abstract_class?
         'model-brief'
@@ -81,7 +80,6 @@ class ModelsDiagram < AppDiagram
         'model'
       end
       @graph.add_node [node_type, current_class.name, node_attribs]
-      generated = true
       # Process class associations
       reflections = current_class.reflect_on_all_associations
       reflections.select! { |assoc| filter_association_names.include?(assoc.name) } if filter_association_names
@@ -92,18 +90,21 @@ class ModelsDiagram < AppDiagram
         # associations -= current_class.superclass.reflect_on_all_associations
       end
       reflections.each { |r| process_association(current_class.name, r) }
+      [node_type, current_class.name, node_attribs]
     elsif @options.all && (current_class.is_a? Class)
       # Not ActiveRecord::Base model
       node_type = @options.brief ? 'class-brief' : 'class'
       @graph.add_node [node_type, current_class.name]
-      generated = true
+      [node_type, current_class.name]
     elsif @options.modules && (current_class.is_a? Module)
-        @graph.add_node ['module', current_class.name]
+      @graph.add_node ['module', current_class.name]
+      ['module', current_class.name]
     end
 
     # Only consider meaningful inheritance relations for generated classes
-    if @options.inheritance && generated && ![ActiveRecord::Base, Object].include?(current_class.superclass)
-      @graph.add_edge ['is-a', current_class.superclass.name, current_class.name]
+    if @options.inheritance && ![ActiveRecord::Base, Object].include?(current_class.superclass)
+#      @graph.add_edge ['is-a', current_class.superclass.name, current_class.name]
+      @graph.add_cluster(current_class.superclass.name, node)
     end
   end
 
