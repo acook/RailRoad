@@ -10,8 +10,8 @@ class DiagramGraph
 
   attr_writer :label
   attr_accessor :github, :color_counter
-  @@APP_MODEL_PATH = "blob/master/app/models/"
-  @@SVG_COLORS = %w{chocolate beige blue blueviolet brown coral crimson cyan grey green lightblue lime navy olive orange pink plum purple red}
+  APP_MODEL_GIT_PATH = "blob/master/app/models/"
+  SVG_COLORS = %w{chocolate beige blue blueviolet brown coral crimson cyan grey green lightblue lime navy olive orange pink plum purple red}
 
   def initialize
     @diagram_type = ''
@@ -75,7 +75,7 @@ class DiagramGraph
   def to_dot
     return dot_header +
            @nodes.map{ |n| dot_node(n[0], n[1], n[2], n[1]) }.join +
-           @clusters.map{ |k, h| dot_cluster(k, h[:nodes], @@SVG_COLORS[rand(@@SVG_COLORS.size)]) }.join +
+           @clusters.map{ |k, h| dot_cluster(k, h[:nodes], SVG_COLORS[rand(SVG_COLORS.size)]) }.join +
            @edges.map{ |e| dot_edge(e[0], e[1], e[2], e[3]) }.join +
            dot_footer
   end
@@ -121,7 +121,6 @@ class DiagramGraph
   # Build diagram label
   def dot_label
     return if !@show_label || label.empty?
-#    "\t_diagram_info [shape=\"plaintext\", label=\"#{label.map {|x| "#{x}\\l" }.join}\", fontsize=13]\n"
     "\tlabelloc=\"t\";\n \tlabel=\"#{label.map {|x| "#{x}\\l" }.join}\"\n"
   end
 
@@ -133,8 +132,10 @@ class DiagramGraph
            options = 'shape=Mrecord, label="{' + name + '|'
            options += attributes.join('\l')
            options += '\l}"'
-           options += ", color=#{quote(color)}"
-           options += ", URL=#{quote(@github + @@APP_MODEL_PATH + filename.underscore  + '.rb')}" if  !filename.nil? and !@github.nil?
+           options += ", bgcolor=#{quote(color)}"
+           if filepath = file_url(name)
+             options += ", URL=#{quote(filepath)}"
+           end
       when 'model-brief'
            options = ''
       when 'class'
@@ -159,6 +160,19 @@ class DiagramGraph
     end # case
     return "\t#{quote(name)} [#{options}]\n"
   end # dot_node
+
+  def file_url(class_name)
+    filename = class_name.underscore
+    last = nil
+    possible_paths = filename.split("/").map do |piece|
+      last = [last, piece].join("/")
+    end
+    path = possible_paths.detect do |path|
+      File.exists?("#{Rails.root}/app/models#{path}.rb")
+    end
+    path ||= filename
+    @github + APP_MODEL_GIT_PATH + path[1..-1] + '.rb' if !@github.nil?
+  end
 
   # Build a DOT graph edge
   # http://www.graphviz.org/doc/info/attrs.html
