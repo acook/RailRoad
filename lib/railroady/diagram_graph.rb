@@ -9,8 +9,9 @@
 class DiagramGraph
 
   attr_writer :label
-  attr_accessor :github
+  attr_accessor :github, :color_counter
   @@APP_MODEL_PATH = "blob/master/app/models/"
+  @@SVG_COLORS = %w{chocolate beige blue blueviolet brown coral crimson cyan grey green lightblue lime navy olive orange pink plum purple red}
 
   def initialize
     @diagram_type = ''
@@ -18,6 +19,7 @@ class DiagramGraph
     @nodes = []
     @edges = []
     @clusters = {}
+    @color_counter = 0
   end
 
   def add_node(node)
@@ -73,7 +75,7 @@ class DiagramGraph
   def to_dot
     return dot_header +
            @nodes.map{ |n| dot_node(n[0], n[1], n[2], n[1]) }.join +
-           @clusters.map{ |k, h| dot_cluster(k, h[:nodes]) }.join +
+           @clusters.map{ |k, h| dot_cluster(k, h[:nodes], @@SVG_COLORS[rand(@@SVG_COLORS.size)]) }.join +
            @edges.map{ |e| dot_edge(e[0], e[1], e[2], e[3]) }.join +
            dot_footer
   end
@@ -86,9 +88,9 @@ class DiagramGraph
 
   private
 
-  def dot_cluster(name, nodes)
+  def dot_cluster(name, nodes, color)
     block = dot_cluster_header(name)
-    block += "\t" + nodes.map{ |n| dot_node(n[0], n[1], n[2], name) }.join("\t")
+    block += "\t" + nodes.map{ |n| dot_node(n[0], n[1], n[2], name, color) }.join("\t")
     block += "\t" + dot_cluster_edges(name, nodes)
     "#{block} \t#{dot_footer}"
   end
@@ -124,13 +126,15 @@ class DiagramGraph
   end
 
   # Build a DOT graph node
-  def dot_node(type, name, attributes=nil, filename=nil)
+  # TODO: Extend this monster of parameters into *args
+  def dot_node(type, name, attributes=nil, filename=nil, color=nil)
     case type
       when 'model'
            options = 'shape=Mrecord, label="{' + name + '|'
            options += attributes.join('\l')
            options += '\l}"'
-           options += ', URL="' + @github + @@APP_MODEL_PATH + filename.underscore  + '.rb"' if  !filename.nil? and !@github.nil?
+           options += ", color=#{quote(color)}"
+           options += ", URL=#{quote(@github + @@APP_MODEL_PATH + filename.underscore  + '.rb')}" if  !filename.nil? and !@github.nil?
       when 'model-brief'
            options = ''
       when 'class'
@@ -162,15 +166,17 @@ class DiagramGraph
     options =  name != '' ? "label=\"#{name}\", tooltip=\"#{name}\", " : ''
     case type
       when 'one-one'
-           options += 'arrowtail=tee, arrowhead=odot, dir=both, concentrate=true'
+           options += 'arrowtail=tee, arrowhead=odot, dir="both", concentrate=true'
       when 'one-many'
-           options += 'arrowtail=odot, arrowhead=crow, dir=both, concentrate=true'
+           options += 'arrowtail=odot, arrowhead=crow, dir="both", concentrate=true'
       when 'many-many'
-           options += 'arrowtail=crow, arrowhead=crow, dir=both, concentrate=true'
+           options += 'arrowtail=crow, arrowhead=crow, dir="both", concentrate=true'
       when 'is-a'
            options += 'label="", dir="none"'
       when 'is-a-child'
            options += 'label="", dir="back", arrowtail=empty'
+      when 'invisible'
+           options += 'style=invis, dir=both'
       when 'event'
            options += "fontsize=10"
     end

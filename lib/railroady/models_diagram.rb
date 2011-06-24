@@ -11,6 +11,8 @@ require 'set'
 class ModelsDiagram < AppDiagram
 
   attr_reader :filter_class_names, :filter_association_names
+  @@COLORS = {:polymorphic => {:bgcolor => 'beige', :color => "green"},
+              :others => {:bgcolor => 'olive', :orange => 'orange'}}
 
   def initialize(options = OptionsStruct.new)
     #options.exclude.map! {|e| "app/models/" + e}
@@ -133,13 +135,11 @@ class ModelsDiagram < AppDiagram
     # Ignoring belongs_to macro since has_many and has_one edges' arrowtails/arrowheads will succinctly indicate
     # the relationship between the models, there is no need to duplicate the edges to indicated the relationship in reverse.
     # Doesn't conflict with polymorphic belongs_to relationships.
-    if reflection.macro.to_s == 'belongs_to' && association_class_name.constantize.reflect_on_all_associations(:has_many).any? do
+    assoc_type = if reflection.macro.to_s == 'belongs_to' && association_class_name.constantize.reflect_on_all_associations(:has_many).any? do
         |r| r.name == class_name.underscore.pluralize.to_sym
       end
-      return
-    end
-
-    assoc_type = if ['has_one', 'belongs_to'].include? reflection.macro.to_s
+      'invisible'
+    elsif ['has_one', 'belongs_to'].include? reflection.macro.to_s
       'one-one'
     elsif reflection.macro.to_s == 'has_many' && !reflection.options[:through]
       'one-many'
