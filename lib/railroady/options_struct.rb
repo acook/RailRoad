@@ -58,7 +58,7 @@ class OptionsStruct < OpenStruct
         self.filter = list.map { |i| i.strip }
       end
       opts.on("-g", "--github REPO_URL", "Include github links ie. 'https://github.com/Mixbook/mixbook_com/'") do |g|
-        self.github = g.sub(/(\w)$/, '\1/')
+        self.github = g.sub(/([^\/])$/, '\1/')
       end
       opts.on("-i", "--inheritance", "Include inheritance relations") do |i|
         self.inheritance = i

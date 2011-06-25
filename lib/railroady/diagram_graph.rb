@@ -9,7 +9,7 @@
 class DiagramGraph
 
   attr_writer :label
-  attr_accessor :github, :color_counter
+  attr_accessor :github
   APP_MODEL_GIT_PATH = "blob/master/app/models/"
   SVG_COLORS = %w{chocolate beige blue blueviolet brown coral crimson cyan grey green lightblue lime navy olive orange pink plum purple red}
 
@@ -19,7 +19,6 @@ class DiagramGraph
     @nodes = []
     @edges = []
     @clusters = {}
-    @color_counter = 0
   end
 
   def add_node(node)
@@ -35,19 +34,20 @@ class DiagramGraph
     # Remove node to be generated
     @nodes.delete_at(@nodes.index(node))
 
-    node << superclass_name # node[-1] contains superclass_name
-
+    node[:superclass_name] = superclass_name
+    
     # Check to see if node's superclass isn't already in another cluster
-    if superclass_key = @clusters.select { |key, hash| hash[:nodes].flatten.include?(superclass_name) }.keys[0]
-      @clusters[superclass_key][:nodes] << node
+    superclass_hash = @clusters.select { |key, array_node_hash| array_node_hash.any? {|x| x[:class_name] == superclass_name } }
+    unless superclass_hash.empty?
+      @clusters[superclass_hash.keys.first] << node
     else
-      @clusters.include?(superclass_name) ? @clusters[superclass_name][:nodes] << node :
-        @clusters[superclass_name] = {:nodes => [node]}
+      @clusters.include?(superclass_name) ? @clusters[superclass_name] << node :
+        @clusters[superclass_name] = [node]
     end
 
     # Find superclass node to be generated and move it in clusters
-    if i = @nodes.index { |array| array.include?(superclass_name) }
-      @clusters[superclass_name][:nodes].unshift(@nodes[i])
+    if i = @nodes.index { |hash| hash[:class_name] == superclass_name }
+      @clusters[superclass_name].unshift(@nodes[i])
       @nodes.delete_at(i)
     end
 
@@ -73,10 +73,11 @@ class DiagramGraph
 
   # Generate DOT graph
   def to_dot
+#    puts @clusters.inspect
     return dot_header +
-           @nodes.map{ |n| dot_node(n[0], n[1], n[2], n[1]) }.join +
-           @clusters.map{ |k, h| dot_cluster(k, h[:nodes], SVG_COLORS[rand(SVG_COLORS.size)]) }.join +
-           @edges.map{ |e| dot_edge(e[0], e[1], e[2], e[3]) }.join +
+           @nodes.map{ |node_hash| dot_node(node_hash) }.join +
+           @clusters.map{ |k, nodes| dot_cluster(k, nodes, SVG_COLORS[rand(SVG_COLORS.size)]) }.join +
+           @edges.map{ |edge_hash| dot_edge(edge_hash) }.join +
            dot_footer
   end
 
@@ -90,17 +91,18 @@ class DiagramGraph
 
   def dot_cluster(name, nodes, color)
     block = dot_cluster_header(name)
-    block += "\t" + nodes.map{ |n| dot_node(n[0], n[1], n[2], name, color) }.join("\t")
+    block += "\t" + nodes.map{ |node_hash| dot_node(node_hash) }.join("\t")
     block += "\t" + dot_cluster_edges(name, nodes)
     "#{block} \t#{dot_footer}"
   end
 
   # Build DOT edges within a specific cluster
-  def dot_cluster_edges(name, nodes)
+  def dot_cluster_edges(name, node_hash)
     block = "\t\"#{name}_edge\"" + '[label="", fixedsize="false", width=0, height=0, shape=none]' + "\n"
     block += "\t\t#{quote(name)} -> \"#{name}_edge\"" + '[label="", dir="back", arrowtail=empty, arrowsize="2", len="0.2"]' + "\n"
-    block += nodes[1..-1].map do |n|
-      n[-1] == name ? dot_edge('is-a', "#{name}_edge", n[1]) : dot_edge('is-a-child', "#{n[-1]}", n[1])
+    block += node_hash[1..-1].map do |node|
+      node[:superclass_name] == name ? dot_edge({:type => 'is-a', :class_name => "#{name}_edge", :association_class_name => node[:class_name]}) :
+        dot_edge({:type => 'is-a-child', :class_name => node[:superclass_name], :association_class_name => node[:class_name]})
     end.join("\t")
   end
 
@@ -126,7 +128,9 @@ class DiagramGraph
 
   # Build a DOT graph node
   # TODO: Extend this monster of parameters into *args
-  def dot_node(type, name, attributes=nil, filename=nil, color=nil)
+  def dot_node(node_hash)
+    type, name, attributes, filename, color = node_hash[:type], node_hash[:class_name], node_hash[:attributes], node_hash[:class_name], node_hash[:color]
+
     case type
       when 'model'
            options = 'shape=Mrecord, label="{' + name + '|'
@@ -176,7 +180,9 @@ class DiagramGraph
 
   # Build a DOT graph edge
   # http://www.graphviz.org/doc/info/attrs.html
-  def dot_edge(type, from, to, name = '')
+  def dot_edge(edge_hash)
+    type, from, to = edge_hash[:type], edge_hash[:class_name], edge_hash[:association_class_name]
+    name = edge_hash[:association_name] || ''
     options =  name != '' ? "label=\"#{name}\", tooltip=\"#{name}\", " : ''
     case type
       when 'one-one'

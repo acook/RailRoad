@@ -81,7 +81,7 @@ class ModelsDiagram < AppDiagram
         end
         'model'
       end
-      @graph.add_node [node_type, current_class.name, node_attribs]
+      @graph.add_node({:type => node_type, :class_name => current_class.name, :attributes => node_attribs})
       # Process class associations
       reflections = current_class.reflect_on_all_associations
       reflections.select! { |assoc| filter_association_names.include?(assoc.name) } if filter_association_names
@@ -92,15 +92,15 @@ class ModelsDiagram < AppDiagram
         # associations -= current_class.superclass.reflect_on_all_associations
       end
       reflections.each { |r| process_association(current_class.name, r) }
-      [node_type, current_class.name, node_attribs]
+      {:type => node_type, :class_name => current_class.name, :attributes => node_attribs}
     elsif @options.all && (current_class.is_a? Class)
       # Not ActiveRecord::Base model
       node_type = @options.brief ? 'class-brief' : 'class'
-      @graph.add_node [node_type, current_class.name]
-      [node_type, current_class.name]
+      @graph.add_node({:type => node_type, :class_name => current_class.name})
+      {:type => node_type, :class_name => current_class.name}
     elsif @options.modules && (current_class.is_a? Module)
-      @graph.add_node ['module', current_class.name]
-      ['module', current_class.name]
+      @graph.add_node({:type => 'module', :class_name => current_class.name})
+      {:type => 'module', :class_name => current_class.name}
     end
 
     # Only consider meaningful inheritance relations for generated classes and group them into subgraphs/clusters
@@ -147,7 +147,8 @@ class ModelsDiagram < AppDiagram
       @habtm << [class_name, reflection.class_name, association_name]
       'many-many'
     end
-    @graph.add_edge [assoc_type, class_name, association_class_name, association_name] if assoc_type
+    @graph.add_edge({:type => assoc_type, :class_name => class_name, :association_class_name => association_class_name,
+      :association_name => association_name}) if assoc_type
   end
 
   private
