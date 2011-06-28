@@ -97,9 +97,11 @@ class DiagramGraph
   end
 
   # Build DOT edges within a specific cluster
+  #TODO: fix so that edges converge to a single point only when it has more than 3 childern.
   def dot_cluster_edges(name, node_hash)
     block = "\t\"#{name}_edge\"" + '[label="", fixedsize="false", width=0, height=0, shape=none]' + "\n"
     block += "\t\t#{quote(name)} -> \"#{name}_edge\"" + '[label="", dir="back", arrowtail=empty, arrowsize="2", len="0.2"]' + "\n"
+
     block += node_hash[1..-1].map do |node|
       node[:superclass_name] == name ? dot_edge({:type => 'is-a', :class_name => "#{name}_edge", :association_class_name => node[:class_name]}) :
         dot_edge({:type => 'is-a-child', :class_name => node[:superclass_name], :association_class_name => node[:class_name]})
@@ -127,7 +129,6 @@ class DiagramGraph
   end
 
   # Build a DOT graph node
-  # TODO: Extend this monster of parameters into *args
   def dot_node(node_hash)
     type, name, attributes, filename, color = node_hash[:type], node_hash[:class_name], node_hash[:attributes], node_hash[:class_name], node_hash[:color]
 

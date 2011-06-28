@@ -104,7 +104,7 @@ class ModelsDiagram < AppDiagram
     end
 
     # Only consider meaningful inheritance relations for generated classes and group them into subgraphs/clusters
-    if @options.inheritance && ![ActiveRecord::Base, Object].include?(current_class.superclass)
+    if @options.inheritance && ![ActiveRecord::Base, Object].include?(current_class.superclass) && filter_class_names.include?(current_class.superclass.to_s)
       @graph.add_cluster(current_class.superclass.name, node)
     end
   end
