@@ -177,8 +177,16 @@ class ModelsDiagram < AppDiagram
     @filter_class_names, @filter_association_names = Set.new, Set.new
     generate_filter_sets_by_detecting_constants_and_associations!
     generate_filter_sets_by_loading_constants!
+    expand_filter_sets_by_inheritance!
     say_if_verbose("Limiting class names to:\n#{@filter_class_names.to_a.join(", ")}\n")
     say_if_verbose("Limiting association names to:\n#{@filter_association_names.to_a.join(", ")}\n")
+  end
+
+  def expand_filter_sets_by_inheritance!
+    @filter_class_names.to_a.each do |class_name|
+      filter_class = class_name.constantize
+      model_classes.each { |klass| @filter_class_names << klass.to_s if klass < filter_class }
+    end
   end
 
   # Look through the loaded models and attempt to match using elements from @options.filter.
