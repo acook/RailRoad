@@ -12,6 +12,16 @@ def full_path(name = 'test.txt')
   f = File.join(Rails.root.to_s.gsub(' ', '\ '), 'doc', name)
   f.to_s
 end
+
+def git_repo_url
+  "https://github.com/" + File.open(File.join(Rails.root.to_s.gsub(' ', '\ '), '.git', 'config'), 'r') do |f|
+    while (line = f.gets)
+      break if line.match(/git@github\.com:(.+)/)
+    end
+    # returns Mixbook/mixbook_com.git"
+    line.match(/git@github\.com:(.+)/)[1].split('.')[0]
+  end
+end
   
 namespace :diagram do
  
@@ -33,17 +43,9 @@ namespace :diagram do
   task :models do
     if File.exists?(@CONFIG_YAML)
       hash = YAML.load_file(@CONFIG_YAML)
-
-      git_repo_url = "https://github.com/" + File.open(File.join(Rails.root.to_s.gsub(' ', '\ '), '.git', 'config'), 'r') do |f|
-        while (line = f.gets)
-          break if line.match(/git@github\.com:(.+)/)
-        end
-        # returns Mixbook/mixbook_com.git"
-        line.match(/git@github\.com:(.+)/)[1].split('.')[0]
-      end
-
       hash[:models].each do |model|
-        sh %{railroady -iamM -l "#{model[:title]}" -f "#{model[:filter]}" -g "#{git_repo_url}"  | dot -Tsvg > doc/#{model[:filename]}.svg}
+        File.mkdir_p("doc/diagrams/")
+        sh %{railroady -iamM -l "#{model[:title]}" -f "#{model[:filter]}" -g "#{git_repo_url}"  | dot -Tsvg > doc/diagrams/#{model[:filename]}.svg}
       end
     else
       path = if ENV["FILENAME"] && ENV["FILENAME"].include?("/")
