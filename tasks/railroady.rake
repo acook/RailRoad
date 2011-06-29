@@ -44,7 +44,7 @@ namespace :diagram do
     if File.exists?(@CONFIG_YAML)
       hash = YAML.load_file(@CONFIG_YAML)
       hash[:models].each do |model|
-        File.mkdir_p("doc/diagrams/")
+        FileUtils.mkdir_p("doc/diagrams/")
         sh %{railroady -iamM -l "#{model[:title]}" -f "#{model[:filter]}" -g "#{git_repo_url}"  | dot -Tsvg > doc/diagrams/#{model[:filename]}.svg}
       end
     else
