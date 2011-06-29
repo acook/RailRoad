@@ -143,7 +143,7 @@ class ModelsDiagram < AppDiagram
       'one-one'
     elsif reflection.macro.to_s == 'has_many' && !reflection.options[:through]
       'one-many'
-    elsif !@habtm.include?([reflection.class_name, class_name, association_name]) # habtm or has_many, :through
+    elsif !@habtm.include?([reflection.class_name, class_name, association_name]) && @filter_association_names.include?(association_name)# habtm or has_many, :through
       @habtm << [class_name, reflection.class_name, association_name]
       'many-many'
     end
