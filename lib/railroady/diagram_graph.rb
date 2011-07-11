@@ -103,8 +103,8 @@ class DiagramGraph
     block += "\t\t#{quote(name)} -> \"#{name}_edge\"" + '[label="", dir="back", arrowtail=empty, arrowsize="2", len="0.2"]' + "\n"
 
     block += node_hash[1..-1].map do |node|
-      node[:superclass_name] == name ? dot_edge({:type => 'is-a', :class_name => "#{name}_edge", :association_class_name => node[:class_name]}) :
-        dot_edge({:type => 'is-a-child', :class_name => node[:superclass_name], :association_class_name => node[:class_name]})
+      type, class_name = node[:superclass_name]==name ? ['is-a', "#{name}_edge"] : ['is-a-child', node[:superclass_name]]
+      dot_edge(:type => type, :class_name => class_name, :association_class_name => node[:class_name])
     end.join("\t")
   end
 
@@ -185,28 +185,44 @@ class DiagramGraph
     type, from, to = edge_hash[:type], edge_hash[:class_name], edge_hash[:association_class_name]
     name = edge_hash[:association_name] || ''
     options =  name != '' ? "label=\"#{name}\", tooltip=\"#{name}\", " : ''
-    case type
-      when 'one-one'
-           options += 'arrowtail=tee, arrowhead=odot, dir="both", concentrate=true'
-      when 'one-many'
-           options += 'arrowtail=odot, arrowhead=crow, dir="both", concentrate=true'
-      when 'many-many'
-           options += 'arrowtail=crow, arrowhead=crow, dir="both", concentrate=true'
-      when 'is-a'
-           options += 'label="", dir="none"'
-      when 'is-a-child'
-           options += 'label="", dir="back", arrowtail=empty'
-      when 'invisible'
-           options += 'style=invis, dir=both'
-      when 'event'
-           options += "fontsize=10"
+    options +=  case type
+      when 'one-one'    then 'arrowtail=tee,  arrowhead=odot, dir="both", concentrate=true'
+      when 'one-many'   then 'arrowtail=odot, arrowhead=crow, dir="both", concentrate=true'
+      when 'many-many'  then 'arrowtail=crow, arrowhead=crow, dir="both", concentrate=true'
+      when 'is-a'       then 'label="", dir="none"'
+      when 'is-a-child' then 'label="", dir="back", arrowtail=empty'
+      when 'invisible'  then 'style=invis, dir=both'
+      when 'event'      then "fontsize=10"
+      else raise("Unknown type: #{type}")
     end
-    return "\t#{quote(from)} -> #{quote(to)} [#{options}]\n"
+
+    if len = compute_length(from, to, type)
+      options << ", len=#{len}"
+    end
+
+    "\t#{quote(from)} -> #{quote(to)} [#{options}]\n"
   end # dot_edge
 
   # Quotes a class name
   def quote(name)
     '"' + name.to_s + '"'
+  end
+
+  # Compute estimated length between two nodes.
+  # We attempt to use queues about the classes to determine their "closeness"
+  def compute_length(from_class_name, to_class_name, type)
+    # Function only currently works for AR classes
+    return unless [from_class, to_class].all? { |x| x.is_a?(ActiveRecord::Base) }
+
+    len = 10
+    if type.include?("is-a")
+      len -= 9
+    elsif to_class_name.starts_with?(from_class_name) || from_class_name.starts_with?(to_class_name)
+      len -= 6
+    elsif to_class_name.include?(from_class_name) || from_class_name.include?(to_class_name)
+      len -= 3
+    end
+    len
   end
 
 end # class DiagramGraph

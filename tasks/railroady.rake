@@ -22,6 +22,10 @@ def git_repo_url
     line.match(/git@github\.com:(.+)/)[1].split('.')[0]
   end
 end
+
+def to_filename(str)
+  str.downcase.gsub(/\s*diagram\s*/i, "") .underscore.gsub(/\s/, "/") if str
+end
   
 namespace :diagram do
  
@@ -31,10 +35,10 @@ namespace :diagram do
   # Example config yaml file
   # ---
   #   :models:
-  #   - :title: Visit/Referrer Diagram
+  #   - :label: Visit/Referrer Diagram
   #     :filename: visit_referrer
   #     :filter: Referrer*, Visit*
-  #   - :title: Visit/Order Diagram
+  #   - :label: Visit/Order Diagram
   #     :filename: visit_order
   #     :filter: Visit*, Order*
   @CONFIG_YAML = File.join(Rails.root.to_s.gsub(' ', '\ '), 'config', 'railroady.yml')
@@ -44,8 +48,12 @@ namespace :diagram do
     if File.exists?(@CONFIG_YAML)
       hash = YAML.load_file(@CONFIG_YAML)
       hash[:models].each do |model|
-        FileUtils.mkdir_p("doc/diagrams/")
-        sh %{railroady -iamM -l "#{model[:title]}" -f "#{model[:filter]}" -g "#{git_repo_url}"  | dot -Tsvg > doc/diagrams/#{model[:filename]}.svg}
+        model[:filename] ||= to_filename(model[:label] || model[:filter]) || "diagram"
+        filename = "doc/diagrams/#{model[:filename]}.svg"
+        FileUtils.mkdir_p(File.dirname(filename)) # make sure the folder-tree exists.
+        options = "amM"
+        options << "i" if model[:inheritance]
+         sh %{railroady -#{options} -l "#{model[:label]}" -f "#{model[:filter]}" -g "#{git_repo_url}"  | neato -Tsvg > #{filename}}
       end
     else
       path = if ENV["FILENAME"] && ENV["FILENAME"].include?("/")
