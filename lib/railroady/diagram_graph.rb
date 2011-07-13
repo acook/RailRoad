@@ -91,7 +91,6 @@ class DiagramGraph
 
   def create_groups(groups)
     if !groups.nil? && !groups.empty?
-      p format_groups!(groups)
       result = sort_groups_by_edge_sum(groups).map do |model_names|
         model_hash = model_names.map do |model_name|
           if index = @nodes.index { |node| node[:class_name] == model_name }

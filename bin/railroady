@@ -36,6 +36,7 @@ old_dir = Dir.pwd
 
 Dir.chdir(options.root) if options.root != ''
 
+
 if options.command == 'models'
   diagram = ModelsDiagram.new options
 elsif options.command == 'controllers'

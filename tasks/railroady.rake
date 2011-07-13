@@ -42,6 +42,7 @@ namespace :diagram do
   #   - :label: Visit/Order Diagram
   #     :filename: visit_order
   #     :filter: Visit*, Order*
+  #     :force: true
   @CONFIG_YAML = File.join(Rails.root.to_s.gsub(' ', '\ '), 'config', 'railroady.yml')
 
   desc 'Generates an SVG class diagram for all models. Pass in OPTIONS to customize.'
@@ -54,7 +55,11 @@ namespace :diagram do
         FileUtils.mkdir_p(File.dirname(filename)) # make sure the folder-tree exists.
         options = "amM"
         options << "i" if model[:inheritance]
-        sh %{railroady -#{options} -l "#{model[:label]}" -f "#{model[:filter]}" --github "#{git_repo_url}" -g "#{model[:group]}" | dot -Tsvg > #{filename}}
+        if !File.exist?(filename) || model[:force]
+          sh %{railroady -#{options} -l "#{model[:label]}" -f "#{model[:filter]}" --github "#{git_repo_url}" -g "#{model[:group]}" | dot -Tsvg > #{filename}}
+        else
+          puts "File already exist skipping: #{filename}"
+        end
       end
     else
       path = if ENV["FILENAME"] && ENV["FILENAME"].include?("/")

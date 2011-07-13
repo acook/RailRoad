@@ -57,13 +57,13 @@ class OptionsStruct < OpenStruct
       opts.on("-f", "--filter term1[,termN]", Array, "Filter classes and/or associations") do |list|
         self.filter = list.map { |i| i.strip }
       end
-      opts.on("--github", "--github REPO_URL", "Include github links ie. 'https://github.com/Mixbook/mixbook_com/'") do |g|
-        self.github = g.sub(/([^\/])$/, '\1/')
-      end
-      opts.on("-g", "--group [Order, Printer],[Model, etc]", "Group models") do |i|
-        self.groups = i.scan(/\[([\w\s,*]+)\]/).map do |ary|
+      opts.on("-g", "--group [Order*, Printer, orderitem],[Model, etc.]", "Group models") do |g|
+        self.groups = g.scan(/\[([\w\s,*]+)\]/).map do |ary|
           ary[0].split(/[,]|,\s/).map(&:strip)
         end
+      end
+      opts.on("--github", "--github REPO_URL", "Include github links ie. 'https://github.com/Mixbook/mixbook_com/'") do |g|
+        self.github = g.sub(/([^\/])$/, '\1/')
       end
       opts.on("-i", "--inheritance", "Include inheritance relations") do |i|
         self.inheritance = i
