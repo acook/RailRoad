@@ -9,7 +9,7 @@
 class DiagramGraph
 
   attr_writer :label
-  attr_accessor :github
+  attr_accessor :github, :groups
   APP_MODEL_GIT_PATH = "blob/master/app/models/"
   SVG_COLORS = %w{chocolate beige blue blueviolet brown coral crimson cyan grey green lightblue lime navy olive orange pink plum purple red}
 
@@ -29,7 +29,7 @@ class DiagramGraph
     @edges << edge
   end
 
-  # Refactoring: should probably use Sets instead of hashes.
+  # Refactoring: should probably use a class with both nodes and edges instead of hashes.
   def add_cluster(superclass_name, node)
     # Remove node to be generated
     @nodes.delete_at(@nodes.index(node))
@@ -73,8 +73,8 @@ class DiagramGraph
 
   # Generate DOT graph
   def to_dot
-#    puts @clusters.inspect
     return dot_header +
+           create_groups(@groups) +
            @nodes.map{ |node_hash| dot_node(node_hash) }.join +
            @clusters.map{ |k, nodes| dot_cluster(k, nodes, SVG_COLORS[rand(SVG_COLORS.size)]) }.join +
            @edges.map{ |edge_hash| dot_edge(edge_hash) }.join +
@@ -89,6 +89,76 @@ class DiagramGraph
 
   private
 
+  def create_groups(groups)
+    if !groups.nil? && !groups.empty?
+      result = sort_groups_by_edge_sum(groups).map do |model_names|
+        model_hash = model_names.map do |model_name|
+          if index = @nodes.index { |node| node[:class_name] == model_name }
+            node = @nodes.fetch(index)
+            # Remove node to be generated from default node list
+            @nodes.delete_at(index)
+            node
+          elsif @clusters.has_key?(model_name)
+            {:class_name => model_name} # node is a cluster
+          end
+        end
+
+        dot_subgraph(model_names.first, :visible => false) do
+          model_hash.map do |node_hash|
+            node_class_name = node_hash[:class_name]
+            if @clusters.has_key?(node_class_name)
+              cluster_string = dot_cluster(node_hash[:class_name], @clusters[node_hash[:class_name]], SVG_COLORS[rand(SVG_COLORS.size)])
+              @clusters.delete(node_class_name)
+              cluster_string
+            else
+              dot_node(node_hash)
+            end
+          end.join
+        end
+      end.join
+
+      dot_subgraph("overview", :visible => false) { result } # Wrap it around a another
+    else
+      ""
+    end
+  end
+
+  def node_edge_count_hash
+    result = @edges.select { |edge| edge[:type] != 'invisible' }.each_with_object(Hash.new(0)) do |edge, h|
+      h[edge[:class_name].split("::")[0]] += 1
+      h[edge[:association_class_name].split("::")[0]] += 1
+    end.sort { |a,b| a[1] <=> b[1] }
+    Hash[*result.flatten]
+  end
+
+  # sorts each grouping by its sum in ascending order
+  def sort_groups_by_edge_sum(groups)
+    groups.each_with_object({}) do |model_names, h|
+      h[sort_node_by_edge_count(model_names)] = group_edge_sum(model_names)
+    end.sort { |a,b|  a[1] <=> b[1] }.map { |arr| arr[0] }
+  end
+
+  # sorts each model name within a grouping by its sum of edges in descending order
+  def sort_node_by_edge_count(model_names)
+    model_names.sort do |a,b|
+      node_edge_count_hash[b].to_i <=> node_edge_count_hash[a].to_i
+    end
+  end
+
+  def group_edge_sum(model_names)
+    model_names.map { |model_name| node_edge_count_hash[model_name] }.inject(&:+)
+  end
+
+  def dot_subgraph(label, options=nil)
+    %{#{dot_cluster_header(label, options)} \n\t\t#{yield} \n\t\t#{dot_footer}}
+  end
+
+  def dot_cluster_header(name, options=nil)
+    label, color = (!options.nil? && !options[:visible]) ? ["","#FFFFFF"] : [name, "#000000"]
+    string = "\tsubgraph cluster_#{name.underscore} {\n\t\tlabel=#{quote(label)};\n"
+    string + "\t\tcolor=#{quote(color)};\n"
+  end
+
   def dot_cluster(name, nodes, color)
     block = dot_cluster_header(name)
     block += "\t" + nodes.map{ |node_hash| dot_node(node_hash) }.join("\t")
@@ -97,24 +167,20 @@ class DiagramGraph
   end
 
   # Build DOT edges within a specific cluster
-  #TODO: fix so that edges converge to a single point only when it has more than 3 childern.
   def dot_cluster_edges(name, node_hash)
-    block = "\t\"#{name}_edge\"" + '[label="", fixedsize="false", width=0, height=0, shape=none]' + "\n"
-    block += "\t\t#{quote(name)} -> \"#{name}_edge\"" + '[label="", dir="back", arrowtail=empty, arrowsize="2", len="0.2"]' + "\n"
+    aggregate_edge = "#{name}_edge"
 
-    block += node_hash[1..-1].map do |node|
-      type, class_name = node[:superclass_name]==name ? ['is-a', "#{name}_edge"] : ['is-a-child', node[:superclass_name]]
+    %{\t"#{aggregate_edge}"[label="", fixedsize="false", width=0, height=0, shape=none]\n} +
+    %{\t\t#{quote(name)} -> "#{aggregate_edge}"[label="", dir="back", arrowtail=empty, arrowsize="2", len="0.2"]\n} +
+    node_hash[1..-1].map do |node|
+      type, class_name = node[:superclass_name]==name ? ['is-a', aggregate_edge] : ['is-a-child', node[:superclass_name]]
       dot_edge(:type => type, :class_name => class_name, :association_class_name => node[:class_name])
     end.join("\t")
   end
 
-  def dot_cluster_header(name)
-    "\tsubgraph cluster_#{name.underscore} {\n \t\tlabel=#{quote(name)}\n"
-  end
-
   # Build DOT diagram header
   def dot_header
-    "digraph #{@diagram_type.downcase}_diagram {\n\tgraph[overlap=false, splines=ortho]\n#{dot_label}"
+    "digraph #{@diagram_type.downcase}_diagram {\n\tgraph[overlap=false, outputorder=edgesfirst, splines=ortho] \n\tnode[style=filled, fillcolor=white]\n#{dot_label}"
   end
 
   # Build DOT diagram footer
@@ -196,33 +262,12 @@ class DiagramGraph
       else raise("Unknown type: #{type}")
     end
 
-    if len = compute_length(from, to, type)
-      options << ", len=#{len}"
-    end
-
     "\t#{quote(from)} -> #{quote(to)} [#{options}]\n"
   end # dot_edge
 
   # Quotes a class name
   def quote(name)
-    '"' + name.to_s + '"'
-  end
-
-  # Compute estimated length between two nodes.
-  # We attempt to use queues about the classes to determine their "closeness"
-  def compute_length(from_class_name, to_class_name, type)
-    # Function only currently works for AR classes
-    return unless [from_class, to_class].all? { |x| x.is_a?(ActiveRecord::Base) }
-
-    len = 10
-    if type.include?("is-a")
-      len -= 9
-    elsif to_class_name.starts_with?(from_class_name) || from_class_name.starts_with?(to_class_name)
-      len -= 6
-    elsif to_class_name.include?(from_class_name) || from_class_name.include?(to_class_name)
-      len -= 3
-    end
-    len
+    %{"#{name}"}
   end
 
 end # class DiagramGraph

@@ -36,6 +36,7 @@ class AppDiagram
     @graph.show_label = !@options.hide_label
     @graph.label = @options.label
     @graph.github = @options.github
+    @graph.groups = @options.groups
   end
   
 

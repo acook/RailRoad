@@ -38,6 +38,7 @@ namespace :diagram do
   #   - :label: Visit/Referrer Diagram
   #     :filename: visit_referrer
   #     :filter: Referrer*, Visit*
+  #     :group: "[Order, OrderRecipient], [ShoppingCart, ShoppingCartRecipient]"
   #   - :label: Visit/Order Diagram
   #     :filename: visit_order
   #     :filter: Visit*, Order*
@@ -53,7 +54,7 @@ namespace :diagram do
         FileUtils.mkdir_p(File.dirname(filename)) # make sure the folder-tree exists.
         options = "amM"
         options << "i" if model[:inheritance]
-         sh %{railroady -#{options} -l "#{model[:label]}" -f "#{model[:filter]}" -g "#{git_repo_url}"  | neato -Tsvg > #{filename}}
+        sh %{railroady -#{options} -l "#{model[:label]}" -f "#{model[:filter]}" --github "#{git_repo_url}" -g "#{model[:group]}" | dot -Tsvg > #{filename}}
       end
     else
       path = if ENV["FILENAME"] && ENV["FILENAME"].include?("/")
