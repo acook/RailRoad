@@ -38,7 +38,7 @@ namespace :diagram do
   #   - :label: Visit/Referrer Diagram
   #     :filename: visit_referrer
   #     :filter: Referrer*, Visit*
-  #     :group: "[Order, OrderRecipient], [ShoppingCart, ShoppingCartRecipient]"
+  #     :group: "[Order*, OrderRecipient, orderitem], [ShoppingCart, ShoppingCartRecipient]"
   #   - :label: Visit/Order Diagram
   #     :filename: visit_order
   #     :filter: Visit*, Order*
