@@ -91,6 +91,7 @@ class DiagramGraph
 
   def create_groups(groups)
     if !groups.nil? && !groups.empty?
+      expand_wildcard_groups!(groups)
       result = sort_groups_by_edge_sum(groups).map do |model_names|
         model_hash = model_names.map do |model_name|
           if index = @nodes.index { |node| node[:class_name] == model_name }
@@ -120,6 +121,15 @@ class DiagramGraph
       dot_subgraph("overview", :visible => false) { result } # Wrap it around a another
     else
       ""
+    end
+  end
+
+  def expand_wildcard_groups!(groups)
+    groups.map! do |model_names|
+      model_names.map! do |model_name|
+        model_name.match(/\w+\*/).nil? ? model_name :
+          @nodes.select { |node| !node[:class_name].match(/#{model_name[0..-2]}.*/).nil? }.map { |node| node[:class_name].to_s }
+      end.flatten
     end
   end
 

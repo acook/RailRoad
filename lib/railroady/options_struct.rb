@@ -61,7 +61,7 @@ class OptionsStruct < OpenStruct
         self.github = g.sub(/([^\/])$/, '\1/')
       end
       opts.on("-g", "--group [Order, Printer],[Model, etc]", "Group models") do |i|
-        self.groups = i.scan(/\[([\w\s,]+)\]/).map do |ary|
+        self.groups = i.scan(/\[([\w\s,*]+)\]/).map do |ary|
           ary[0].split(/[,]|,\s/).map(&:strip)
         end
       end
