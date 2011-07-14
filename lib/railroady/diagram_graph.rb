@@ -11,46 +11,16 @@ class DiagramGraph
   attr_writer :label
   attr_accessor :github, :groups
   APP_MODEL_GIT_PATH = "blob/master/app/models/"
-  SVG_COLORS = %w{chocolate beige blue blueviolet brown coral crimson cyan grey green lightblue lime navy olive orange pink plum purple red}
 
   def initialize
     @diagram_type = ''
     @show_label = false
-    @nodes = []
-    @edges = []
-    @clusters = {}
+    @model_nodes = []
+    @sti_clusters = {}
   end
 
-  def add_node(node)
-    @nodes << node
-  end
-
-  def add_edge(edge)
-    @edges << edge
-  end
-
-  # Refactoring: should probably use a class with both nodes and edges instead of hashes.
-  def add_cluster(superclass_name, node)
-    # Remove node to be generated
-    @nodes.delete_at(@nodes.index(node))
-
-    node[:superclass_name] = superclass_name
-    
-    # Check to see if node's superclass isn't already in another cluster
-    superclass_hash = @clusters.select { |key, array_node_hash| array_node_hash.any? {|x| x[:class_name] == superclass_name } }
-    unless superclass_hash.empty?
-      @clusters[superclass_hash.keys.first] << node
-    else
-      @clusters.include?(superclass_name) ? @clusters[superclass_name] << node :
-        @clusters[superclass_name] = [node]
-    end
-
-    # Find superclass node to be generated and move it in clusters
-    if i = @nodes.index { |hash| hash[:class_name] == superclass_name }
-      @clusters[superclass_name].unshift(@nodes[i])
-      @nodes.delete_at(i)
-    end
-
+  def add_model_node(model_node)
+    @model_nodes << model_node
   end
 
   def diagram_type= (type)
@@ -70,15 +40,14 @@ class DiagramGraph
       "http://railroady.prestonlee.com" ]
   end
 
-
-  # Generate DOT graph
   def to_dot
-    return dot_header +
-           create_groups(@groups) +
-           @nodes.map{ |node_hash| dot_node(node_hash) }.join +
-           @clusters.map{ |k, nodes| dot_cluster(k, nodes, SVG_COLORS[rand(SVG_COLORS.size)]) }.join +
-           @edges.map{ |edge_hash| dot_edge(edge_hash) }.join +
-           dot_footer
+    create_sti_clusters!
+    dot_diagram do
+      dot_groups(@groups) +
+      @sti_clusters.map{ |superclass_name, model_nodes| dot_sti_cluster(superclass_name, model_nodes) }.join +
+      @model_nodes.map{ |model_node| dot_node(model_node) unless @sti_clusters.has_value?(model_node) || @groups.flatten.include?(model_node) }.join +
+      @model_nodes.map{ |model_node| model_node.edges.map { |edge| dot_edge(edge) } }.join
+    end
   end
 
   # Generate XMI diagram (not yet implemented)
@@ -89,73 +58,141 @@ class DiagramGraph
 
   private
 
-  def create_groups(groups)
-    if !groups.nil? && !groups.empty?
-      result = sort_groups_by_edge_sum(groups).map do |model_names|
-        model_hash = model_names.map do |model_name|
-          if index = @nodes.index { |node| node[:class_name] == model_name }
-            node = @nodes.fetch(index)
-            # Remove node to be generated from default node list
-            @nodes.delete_at(index)
-            node
-          elsif @clusters.has_key?(model_name)
-            {:class_name => model_name} # node is a cluster
-          end
-        end
+  def create_sti_clusters!
+    @sti_clusters = @model_nodes.select { |model_node| model_node.sti_inheritance }.each_with_object({}) do |model_node, h|
+      superclass_name = model_node.superclass_name[/^(\w+)|::/]
+      h.has_key?(superclass_name) ? h[superclass_name] << model_node : h[superclass_name] = [model_node]
+    end.each do |superclass_name, model_nodes|
+      superclass_model_node = @model_nodes.select { |model_node| model_node == superclass_name }.first
+      model_nodes.unshift(superclass_model_node)
+    end
+  end
 
-        dot_subgraph(model_names.first, :visible => false) do
-          model_hash.map do |node_hash|
-            node_class_name = node_hash[:class_name]
-            if @clusters.has_key?(node_class_name)
-              cluster_string = dot_cluster(node_hash[:class_name], @clusters[node_hash[:class_name]], SVG_COLORS[rand(SVG_COLORS.size)])
-              @clusters.delete(node_class_name)
-              cluster_string
-            else
-              dot_node(node_hash)
-            end
+  def dot_groups(groups)
+    return "" if groups.nil? || groups.empty?
+    
+    dot_subgraph("overview", :visible => false) do
+      groups_with_model_nodes!.map do |model_node_group|
+        dot_subgraph(model_node_group.first.class_name, :visible => false) do
+          model_node_group.map do |model_node|
+            @sti_clusters.has_key?(model_node.class_name) ? dot_sti_cluster(model_node.class_name, @sti_clusters.delete(model_node.class_name)) :
+              dot_node(model_node)
           end.join
         end
       end.join
-
-      dot_subgraph("overview", :visible => false) { result } # Wrap it around a another
-    else
-      ""
     end
   end
 
-  def format_groups!(groups)
-    groups.map! do |model_names|
-      model_names.map! do |model_name|
-        model_name.camelize.match(/\w+\*/).nil? ? model_name.camelize :
-          @nodes.select { |node| !node[:class_name].match(/^#{model_name.camelize[0..-2]}.*$/).nil? }.map { |node| node[:class_name].to_s.camelize }
-      end.uniq.flatten
+  # Reformat the groups' model name and extrapolate the wildcards
+  def expand_group_name(model_name)
+    model_name.camelize.match(/\w+\*/).nil? ? [model_name.camelize] :
+      @model_nodes.select { |model_node| !model_node.class_name.match(/^#{model_name.camelize[0..-2]}.*$/).nil? }.map { |model_node| model_node.class_name.camelize }.flatten
+  end
+
+  def groups_with_model_nodes!
+    @groups.map! do |group|
+      group.map! do |model_name|
+        expand_group_name(model_name).map do |result|
+          @model_nodes.select { |model_node| model_node == result }.first
+        end
+      end.flatten
     end
+    sort_groups_by_edge_sum(@groups)
   end
 
-  def node_edge_count_hash
-    result = @edges.select { |edge| edge[:type] != 'invisible' }.each_with_object(Hash.new(0)) do |edge, h|
-      h[edge[:class_name].split("::")[0]] += 1
-      h[edge[:association_class_name].split("::")[0]] += 1
-    end.sort { |a,b| a[1] <=> b[1] }
-    Hash[*result.flatten]
-  end
-
-  # sorts each grouping by its sum in ascending order
+  # Sorts each grouping by its sum in ascending order
   def sort_groups_by_edge_sum(groups)
-    groups.each_with_object({}) do |model_names, h|
-      h[sort_node_by_edge_count(model_names)] = group_edge_sum(model_names)
+    groups.each_with_object({}) do |group, h|
+      h[sort_model_nodes_by_edge_count(group)] = group_edge_sum(group)
     end.sort { |a,b|  a[1] <=> b[1] }.map { |arr| arr[0] }
   end
 
-  # sorts each model name within a grouping by its sum of edges in descending order
-  def sort_node_by_edge_count(model_names)
-    model_names.sort do |a,b|
-      node_edge_count_hash[b].to_i <=> node_edge_count_hash[a].to_i
+  # Sorts each model name within a grouping by its sum of edges in descending order
+  def sort_model_nodes_by_edge_count(group)
+    group.sort do |model_node_a, model_node_b|
+      model_node_b.edges.size <=> model_node_a.edges.size
     end
   end
 
-  def group_edge_sum(model_names)
-    model_names.map { |model_name| node_edge_count_hash[model_name] }.inject(&:+)
+  def group_edge_sum(group)
+    group.map { |model_name| model_name.edges.size }.inject(&:+)
+  end
+
+  def dot_sti_cluster(superclass_name, model_nodes)
+    dot_subgraph(superclass_name) do
+      model_nodes.map { |model_node| dot_node(model_node) }.join +
+      dot_sti_cluster_edge(superclass_name, model_nodes)
+    end
+  end
+
+  def dot_sti_cluster_edge(superclass_name, model_nodes)
+    aggregate_edge = "#{superclass_name}_edge"
+
+    %{\t"#{aggregate_edge}"[label="", fixedsize="false", width=0, height=0, shape=none]\n} +
+    %{\t\t#{quote(superclass_name)} -> "#{aggregate_edge}"[label="", dir="back", arrowtail=empty, arrowsize="2", len="0.2"]\n} +
+      
+    model_nodes[1..-1].map do |model_node| # Skipping parent node with superclass being Object or ActiveRecord::Base
+      type, class_name = model_node.superclass_name==superclass_name ? ['is-a', aggregate_edge] : ['is-a-child', model_node.superclass_name]
+      dot_edge(type, class_name, model_node.class_name)
+    end.join("\t")
+  end
+
+  def dot_node(model_node)
+    case model_node.type
+      when 'model'
+           options = 'shape=Mrecord, label="{' + model_node.class_name + '|'
+           options += model_node.attributes.join('\l')
+           options += '\l}"'
+           if filepath = github_file_url(model_node.class_name)
+             options += ", URL=#{quote(filepath)}"
+           end
+      when 'model-brief'
+           options = ''
+      when 'class'
+           options = 'shape=record, label="{' + model_node.class_name + '|}"'
+      when 'class-brief'
+           options = 'shape=box'
+      when 'controller'
+           options = 'shape=Mrecord, label="{' + name + '|'
+           public_methods    = model_node.attributes[:public].join('\l')
+           protected_methods = model_node.attributes[:protected].join('\l')
+           private_methods   = model_node.attributes[:private].join('\l')
+           options += public_methods + '\l|' + protected_methods + '\l|' +
+                      private_methods + '\l'
+           options += '}"'
+      when 'controller-brief'
+           options = ''
+      when 'module'
+           options = 'shape=box, style=dotted, label="' + model_node.class_name + '"'
+      when 'aasm'
+           # Return subgraph format
+           return "subgraph cluster_#{model_node.class_name.downcase} {\n\tlabel = #{quote(model_node.class_name)}\n\t#{model_node.attributes.join("\n  ")}}"
+    end
+    return "\t#{quote(model_node.class_name)} [#{options}]\n"
+  end
+
+  # Reference: http://www.graphviz.org/doc/info/attrs.html
+  def dot_edge(*args)
+    type, from, to, name = if args[0].is_a?(ModelEdge)
+      model_edge = args[0]
+      [model_edge.type, model_edge.from_class_name, model_edge.to_class_name, (model_edge.association_type || '')]
+    else
+      [*args, '']
+    end
+    
+    options =  name != '' ? "label=\"#{name}\", tooltip=\"#{name}\", " : ''
+    options +=  case type
+      when 'one-one'    then 'arrowtail=tee,  arrowhead=odot, dir="both"'
+      when 'one-many'   then 'arrowtail=odot, arrowhead=crow, dir="both"'
+      when 'many-many'  then 'arrowtail=crow, arrowhead=crow, dir="both"'
+      when 'is-a'       then 'label="", dir="none"'
+      when 'is-a-child' then 'label="", dir="back", arrowtail=empty'
+      when 'invisible'  then 'style=invis, dir=both'
+      when 'event'      then "fontsize=10"
+      else raise("Unknown type: #{type}")
+    end
+
+    "\t#{quote(from)} -> #{quote(to)} [#{options}]\n"
   end
 
   def dot_subgraph(label, options=nil)
@@ -168,80 +205,24 @@ class DiagramGraph
     string + "\t\tcolor=#{quote(color)};\n"
   end
 
-  def dot_cluster(name, nodes, color)
-    block = dot_cluster_header(name)
-    block += "\t" + nodes.map{ |node_hash| dot_node(node_hash) }.join("\t")
-    block += "\t" + dot_cluster_edges(name, nodes)
-    "#{block} \t#{dot_footer}"
-  end
-
-  # Build DOT edges within a specific cluster
-  def dot_cluster_edges(name, node_hash)
-    aggregate_edge = "#{name}_edge"
-
-    %{\t"#{aggregate_edge}"[label="", fixedsize="false", width=0, height=0, shape=none]\n} +
-    %{\t\t#{quote(name)} -> "#{aggregate_edge}"[label="", dir="back", arrowtail=empty, arrowsize="2", len="0.2"]\n} +
-    node_hash[1..-1].map do |node|
-      type, class_name = node[:superclass_name]==name ? ['is-a', aggregate_edge] : ['is-a-child', node[:superclass_name]]
-      dot_edge(:type => type, :class_name => class_name, :association_class_name => node[:class_name])
-    end.join("\t")
-  end
-
-  # Build DOT diagram header
-  def dot_header
-    "digraph #{@diagram_type.downcase}_diagram {\n\tgraph[overlap=false, outputorder=edgesfirst, splines=ortho] \n\tnode[style=filled, fillcolor=white]\n#{dot_label}"
-  end
-
-  # Build DOT diagram footer
-  def dot_footer
-    "}\n"
-  end
-
-  # Build diagram label
   def dot_label
     return if !@show_label || label.empty?
     "\tlabelloc=\"t\";\n \tlabel=\"#{label.map {|x| "#{x}\\l" }.join}\"\n"
   end
 
-  # Build a DOT graph node
-  def dot_node(node_hash)
-    type, name, attributes, filename, color = node_hash[:type], node_hash[:class_name], node_hash[:attributes], node_hash[:class_name], node_hash[:color]
+  def dot_diagram
+    %{#{dot_header} \n\t\t#{yield} \n\t\t#{dot_footer}}
+  end
 
-    case type
-      when 'model'
-           options = 'shape=Mrecord, label="{' + name + '|'
-           options += attributes.join('\l')
-           options += '\l}"'
-           options += ", bgcolor=#{quote(color)}"
-           if filepath = file_url(name)
-             options += ", URL=#{quote(filepath)}"
-           end
-      when 'model-brief'
-           options = ''
-      when 'class'
-           options = 'shape=record, label="{' + name + '|}"'
-      when 'class-brief'
-           options = 'shape=box'
-      when 'controller'
-           options = 'shape=Mrecord, label="{' + name + '|'
-           public_methods    = attributes[:public].join('\l')
-           protected_methods = attributes[:protected].join('\l')
-           private_methods   = attributes[:private].join('\l')
-           options += public_methods + '\l|' + protected_methods + '\l|' +
-                      private_methods + '\l'
-           options += '}"'
-      when 'controller-brief'
-           options = ''
-      when 'module'
-           options = 'shape=box, style=dotted, label="' + name + '"'
-      when 'aasm'
-           # Return subgraph format
-           return "subgraph cluster_#{name.downcase} {\n\tlabel = #{quote(name)}\n\t#{attributes.join("\n  ")}}"
-    end # case
-    return "\t#{quote(name)} [#{options}]\n"
-  end # dot_node
+  def dot_header
+    "digraph #{@diagram_type.downcase}_diagram {\n\tgraph[overlap=false, outputorder=edgesfirst, splines=ortho] \n\tnode[style=filled, fillcolor=white]\n#{dot_label}"
+  end
 
-  def file_url(class_name)
+  def dot_footer
+    "}\n"
+  end
+
+  def github_file_url(class_name)
     filename = class_name.underscore
     last = nil
     possible_paths = filename.split("/").map do |piece|
@@ -254,29 +235,7 @@ class DiagramGraph
     @github + APP_MODEL_GIT_PATH + path[1..-1] + '.rb' if !@github.nil?
   end
 
-  # Build a DOT graph edge
-  # http://www.graphviz.org/doc/info/attrs.html
-  def dot_edge(edge_hash)
-    type, from, to = edge_hash[:type], edge_hash[:class_name], edge_hash[:association_class_name]
-    name = edge_hash[:association_name] || ''
-    options =  name != '' ? "label=\"#{name}\", tooltip=\"#{name}\", " : ''
-    options +=  case type
-      when 'one-one'    then 'arrowtail=tee,  arrowhead=odot, dir="both", concentrate=true'
-      when 'one-many'   then 'arrowtail=odot, arrowhead=crow, dir="both", concentrate=true'
-      when 'many-many'  then 'arrowtail=crow, arrowhead=crow, dir="both", concentrate=true'
-      when 'is-a'       then 'label="", dir="none"'
-      when 'is-a-child' then 'label="", dir="back", arrowtail=empty'
-      when 'invisible'  then 'style=invis, dir=both'
-      when 'event'      then "fontsize=10"
-      else raise("Unknown type: #{type}")
-    end
-
-    "\t#{quote(from)} -> #{quote(to)} [#{options}]\n"
-  end # dot_edge
-
-  # Quotes a class name
   def quote(name)
     %{"#{name}"}
   end
-
-end # class DiagramGraph
+end

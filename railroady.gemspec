@@ -34,6 +34,8 @@ Gem::Specification.new do |s|
     "lib/railroady/app_diagram.rb",
     "lib/railroady/controllers_diagram.rb",
     "lib/railroady/diagram_graph.rb",
+    "lib/railroady/model_edge.rb",
+    "lib/railroady/model_node.rb",
     "lib/railroady/models_diagram.rb",
     "lib/railroady/options_struct.rb",
     "lib/railroady/railtie.rb",

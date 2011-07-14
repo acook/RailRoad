@@ -5,20 +5,17 @@
 # See COPYING for more details
 
 require 'railroady/app_diagram'
+require 'railroady/model_edge'
+require 'railroady/model_node'
 require 'set'
 
 # RailRoady models diagram
 class ModelsDiagram < AppDiagram
-
   attr_reader :filter_class_names, :filter_association_names
-  @@COLORS = {:polymorphic => {:bgcolor => 'beige', :color => "green"},
-              :others => {:bgcolor => 'olive', :orange => 'orange'}}
 
   def initialize(options = OptionsStruct.new)
-    #options.exclude.map! {|e| "app/models/" + e}
     super(options)
     @graph.diagram_type = 'Models'
-    @habtm = [] # Processed habtm associations
   end
   
   # Process model files
@@ -81,74 +78,42 @@ class ModelsDiagram < AppDiagram
         end
         'model'
       end
-      @graph.add_node({:type => node_type, :class_name => current_class.name, :attributes => node_attribs})
+
+      model_node = ModelNode.new(current_class, node_type, node_attribs)
+      
       # Process class associations
       reflections = current_class.reflect_on_all_associations
       reflections.select! { |assoc| filter_association_names.include?(assoc.name) } if filter_association_names
       if @options.inheritance && !@options.transitive
         superclass_associations = current_class.superclass.reflect_on_all_associations
         reflections.reject! { |a| superclass_associations.include?(a) }
-        # This doesn't works!
-        # associations -= current_class.superclass.reflect_on_all_associations
       end
-      reflections.each { |r| process_association(current_class.name, r) }
-      {:type => node_type, :class_name => current_class.name, :attributes => node_attribs}
+      reflections.each { |r| process_association(model_node, r) }
+      # Only consider meaningful inheritance relations for generated classes and group them into subgraphs/clusters
+      model_node.sti_inheritance = true if @options.inheritance &&
+        ![ActiveRecord::Base, Object].include?(current_class.superclass) && filter_class_names.include?(current_class.superclass.to_s)
+      model_node
     elsif @options.all && (current_class.is_a? Class)
       # Not ActiveRecord::Base model
       node_type = @options.brief ? 'class-brief' : 'class'
-      @graph.add_node({:type => node_type, :class_name => current_class.name})
-      {:type => node_type, :class_name => current_class.name}
+      ModelNode.new(current_class, node_type)
     elsif @options.modules && (current_class.is_a? Module)
-      @graph.add_node({:type => 'module', :class_name => current_class.name})
-      {:type => 'module', :class_name => current_class.name}
+      ModelNode.new(current_class, 'module')
     end
 
-    # Only consider meaningful inheritance relations for generated classes and group them into subgraphs/clusters
-    if @options.inheritance && ![ActiveRecord::Base, Object].include?(current_class.superclass) && filter_class_names.include?(current_class.superclass.to_s)
-      @graph.add_cluster(current_class.superclass.name, node)
-    end
+    @graph.add_model_node(node)
   end
 
   # Process a model association
-  def process_association(class_name, reflection)
+  def process_association(model_node, reflection)
     say_if_verbose("Processing model association #{reflection.name.to_s}", :tab => 2)
 
     if reflection.macro.to_s == 'belongs_to' && @options.hide_belongs_to
       say_if_verbose("Skipping model association #{reflection.name.to_s}", :tab => 3)
       return
     end
-
-    # Only non standard association names needs a label
-    association_class_name = reflection.class_name
-    association_name = reflection.name.to_s
-    # from patch #12384
-    # if assoc.class_name == assoc.name.to_s.singularize.camelize
-    # assoc_class_name = reflection.class_name.underscore.singularize.camelize if reflection.class_name.respond_to?('underscore')
-    # assoc_name = "" if assoc_class_name == reflection.name.to_s.singularize.camelize
-
-    # Patch from "alpack" to support classes in a non-root module namespace. See: http://disq.us/yxl1v
-    #  if class_name.include?("::") && !association_class_name.include?("::")
-    #    association_class_name = class_name.split("::")[0..-2].push(association_class_name).join("::")
-    #  end
-    association_class_name.gsub!(%r{^::}, '')
-
-    # Ignoring belongs_to macro since has_many and has_one edges' arrowtails/arrowheads will succinctly indicate
-    # the relationship between the models, there is no need to duplicate the edges to indicated the relationship in reverse.
-    # Doesn't conflict with polymorphic belongs_to relationships.
-    assoc_type = if reflection.macro.to_s == 'belongs_to' && association_class_name.constantize.reflect_on_all_associations(:has_many).any? do
-        |r| r.name == class_name.underscore.pluralize.to_sym
-      end
-      'invisible'
-    elsif ['has_one', 'belongs_to'].include? reflection.macro.to_s
-      'one-one'
-    elsif reflection.macro.to_s == 'has_many' && !reflection.options[:through]
-      'one-many'
-    elsif !@habtm.include?([reflection.class_name, class_name, association_name]) && @filter_association_names.include?(association_name)# habtm or has_many, :through
-      @habtm << [class_name, reflection.class_name, association_name]
-      'many-many'
-    end
-    @graph.add_edge({:type => assoc_type, :class_name => class_name, :association_class_name => association_class_name,
-      :association_name => association_name}) if assoc_type
+    
+    model_node.add_edge(reflection)
   end
 
   private

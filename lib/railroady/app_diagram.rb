@@ -5,6 +5,8 @@
 # See COPYING for more details
 
 require 'railroady/diagram_graph'
+require 'railroady/model_edge'
+require 'railroady/model_node'
 
 # camelize and constantize methods brought over from active_support
 class String
